@@ -1,0 +1,7 @@
+{
+  "portalId": "jh772sb11jqbegg8j0detzhpe981kykx",
+  "url": "https://eva.virginia.gov/",
+  "goalTemplate": "Extract all currently active solicitations/bids/RFPs from this Virginia government procurement portal (eVA). Navigate to the opportunities/solicitations listing, and extract each opportunity as a JSON object with these fields: title, agency, deadline, estimatedBudget, solicitationNumber, contactName, contactEmail, sourceUrl. Return a JSON object with key opportunities containing an array of these objects. Only include active/open solicitations. Skip any that are closed or awarded.",
+  "state": "VA",
+  "agencyLevel": "state"
+}
