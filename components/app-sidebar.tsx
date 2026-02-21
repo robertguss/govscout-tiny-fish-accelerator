@@ -1,28 +1,25 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
 import {
-  IconCamera,
-  IconChartBar,
-  IconDashboard,
-  IconDatabase,
-  IconFileAi,
-  IconFileDescription,
-  IconFileWord,
-  IconFolder,
   IconHelp,
   IconInnerShadowTop,
-  IconListDetails,
-  IconReport,
-  IconSearch,
   IconSettings,
-  IconUsers,
-} from "@tabler/icons-react"
+  type Icon,
+} from "@tabler/icons-react";
+import {
+  Bookmark,
+  Kanban,
+  LayoutDashboard,
+  Map,
+  Search,
+  User,
+} from "lucide-react";
 
-import { NavDocuments } from "@/components/nav-documents"
-import { NavMain } from "@/components/nav-main"
-import { NavSecondary } from "@/components/nav-secondary"
-import { NavUser } from "@/components/nav-user"
+import { NavDocuments } from "@/components/nav-documents";
+import { NavMain } from "@/components/nav-main";
+import { NavSecondary } from "@/components/nav-secondary";
+import { NavUser } from "@/components/nav-user";
 import {
   Sidebar,
   SidebarContent,
@@ -31,84 +28,47 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
-import { useQuery } from "convex/react"
-import { api } from "@/convex/_generated/api"
+} from "@/components/ui/sidebar";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 const data = {
   navMain: [
     {
       title: "Dashboard",
-      url: "#",
-      icon: IconDashboard,
+      url: "/dashboard",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      icon: LayoutDashboard as any,
     },
     {
-      title: "Lifecycle",
-      url: "#",
-      icon: IconListDetails,
+      title: "Search",
+      url: "/dashboard/search",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      icon: Search as any,
     },
     {
-      title: "Analytics",
-      url: "#",
-      icon: IconChartBar,
+      title: "Pipeline",
+      url: "/dashboard/pipeline",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      icon: Kanban as any,
     },
     {
-      title: "Projects",
-      url: "#",
-      icon: IconFolder,
+      title: "Saved Searches",
+      url: "/dashboard/saved",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      icon: Bookmark as any,
     },
     {
-      title: "Team",
-      url: "#",
-      icon: IconUsers,
-    },
-  ],
-  navClouds: [
-    {
-      title: "Capture",
-      icon: IconCamera,
-      isActive: true,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
+      title: "Coverage Map",
+      url: "/dashboard/coverage",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      icon: Map as any,
     },
     {
-      title: "Proposal",
-      icon: IconFileDescription,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Prompts",
-      icon: IconFileAi,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
+      title: "Profile",
+      url: "/dashboard/profile",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      icon: User as any,
     },
   ],
   navSecondary: [
@@ -122,33 +82,12 @@ const data = {
       url: "#",
       icon: IconHelp,
     },
-    {
-      title: "Search",
-      url: "#",
-      icon: IconSearch,
-    },
   ],
-  documents: [
-    {
-      name: "Data Library",
-      url: "#",
-      icon: IconDatabase,
-    },
-    {
-      name: "Reports",
-      url: "#",
-      icon: IconReport,
-    },
-    {
-      name: "Word Assistant",
-      url: "#",
-      icon: IconFileWord,
-    },
-  ],
-}
+  documents: [] as { name: string; url: string; icon: Icon }[],
+};
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const currentUser = useQuery(api.auth.getCurrentUser)
+  const currentUser = useQuery(api.auth.getCurrentUser);
 
   const user = currentUser
     ? {
@@ -156,7 +95,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         email: currentUser.email,
         avatar: currentUser.image || "",
       }
-    : undefined
+    : undefined;
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -184,5 +123,5 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }
