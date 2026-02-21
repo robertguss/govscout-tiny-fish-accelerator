@@ -16,6 +16,7 @@ import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
 import type * as opportunities from "../opportunities.js";
 import type * as portals from "../portals.js";
+import type * as scrapeJobs from "../scrapeJobs.js";
 import type * as userProfiles from "../userProfiles.js";
 
 import type {
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   jobs: typeof jobs;
   opportunities: typeof opportunities;
   portals: typeof portals;
+  scrapeJobs: typeof scrapeJobs;
   userProfiles: typeof userProfiles;
 }>;
 
