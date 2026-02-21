@@ -44,6 +44,7 @@ export const scrapeSledPortal = internalAction({
     success: v.boolean(),
     count: v.number(),
     newCount: v.number(),
+    stepsUsed: v.optional(v.number()),
     error: v.optional(v.string()),
   }),
   handler: async (
@@ -59,14 +60,23 @@ export const scrapeSledPortal = internalAction({
     const apiKey = process.env.TINYFISH_API_KEY;
     if (!apiKey) throw new Error("TINYFISH_API_KEY not set in Convex env");
 
+    console.log(
+      `[TinyFish] Starting scrape for ${args.state} portal: ${args.url}`,
+    );
+
     // Create a scrape job record for budget tracking
     const jobId = await ctx.runMutation(internal.scrapeJobs.createJob, {
       portalId: args.portalId,
     });
 
+    console.log(
+      `[TinyFish] Job created: ${jobId} — calling TinyFish SSE endpoint...`,
+    );
+
     let result: any = null;
     let completeEvent: any = null;
     let errorMsg: string | undefined;
+    let eventCount = 0;
 
     try {
       const response = await fetch(TINYFISH_SSE_URL, {
@@ -87,6 +97,8 @@ export const scrapeSledPortal = internalAction({
         );
       }
 
+      console.log(`[TinyFish] SSE stream connected — waiting for events...`);
+
       // Read SSE stream with chunk-safe buffer accumulation
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
@@ -94,7 +106,12 @@ export const scrapeSledPortal = internalAction({
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log(
+            `[TinyFish] SSE stream closed after ${eventCount} events`,
+          );
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
@@ -104,9 +121,18 @@ export const scrapeSledPortal = internalAction({
           if (!line.startsWith("data: ")) continue;
           try {
             const event = JSON.parse(line.slice(6));
+            eventCount++;
+            if (event.type && event.type !== "COMPLETE") {
+              console.log(
+                `[TinyFish] Event #${eventCount}: type=${event.type} status=${event.status ?? "-"}`,
+              );
+            }
             if (event.type === "COMPLETE" && event.status === "COMPLETED") {
               completeEvent = event; // Capture full event for stepsUsed
               result = event.resultJson;
+              console.log(
+                `[TinyFish] COMPLETE — stepsUsed=${event.stepsUsed ?? event.steps_used ?? "?"} runId=${event.runId ?? "?"} rawKeys=${Object.keys(event).join(",")}`,
+              );
             }
           } catch {
             // Ignore malformed SSE lines
@@ -137,9 +163,15 @@ export const scrapeSledPortal = internalAction({
     const stepsUsed: number =
       completeEvent?.stepsUsed ?? completeEvent?.steps_used ?? 0;
 
-    console.log(`TinyFish scrape: ${stepsUsed} steps used for ${args.url}`);
+    console.log(
+      `[TinyFish] Scrape finished: ${stepsUsed} steps used for ${args.url}`,
+    );
 
     if (!result?.opportunities?.length) {
+      console.log(
+        `[TinyFish] No opportunities found in result — marking as partial`,
+      );
+
       await ctx.runMutation(internal.scrapeJobs.completeJob, {
         jobId,
         opportunitiesFound: 0,
@@ -176,12 +208,16 @@ export const scrapeSledPortal = internalAction({
       sourceType,
       sourceUrl: opp.sourceUrl ?? args.url,
       sourcePortalId: args.portalId,
-      solicitationNumber: opp.solicitationNumber,
-      contactName: opp.contactName,
-      contactEmail: opp.contactEmail,
+      solicitationNumber: opp.solicitationNumber ?? undefined,
+      contactName: opp.contactName ?? undefined,
+      contactEmail: opp.contactEmail ?? undefined,
       scrapedAt: Date.now(),
       active: true,
     }));
+
+    console.log(
+      `[TinyFish] Ingesting ${opportunities.length} opportunities into database...`,
+    );
 
     const newCount: number = await ctx.runMutation(
       internal.opportunities.ingestBatch,
@@ -190,6 +226,10 @@ export const scrapeSledPortal = internalAction({
         sourceType,
         portalId: args.portalId,
       },
+    );
+
+    console.log(
+      `[TinyFish] Ingest complete: ${newCount} new, ${opportunities.length - newCount} duplicates skipped`,
     );
 
     await Promise.all([
