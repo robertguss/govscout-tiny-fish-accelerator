@@ -134,8 +134,31 @@ export default defineSchema({
     query: v.optional(v.string()),
     filters: v.object({
       states: v.optional(v.array(v.string())),
-      agencyLevels: v.optional(v.array(v.string())),
-      setAsides: v.optional(v.array(v.string())),
+      agencyLevels: v.optional(
+        v.array(
+          v.union(
+            v.literal("federal"),
+            v.literal("state"),
+            v.literal("county"),
+            v.literal("municipal"),
+            v.literal("school_district"),
+            v.literal("special_district"),
+          ),
+        ),
+      ),
+      setAsides: v.optional(
+        v.array(
+          v.union(
+            v.literal("8a"),
+            v.literal("hubzone"),
+            v.literal("sdvosb"),
+            v.literal("wosb"),
+            v.literal("small_business"),
+            v.literal("unrestricted"),
+            v.literal("other"),
+          ),
+        ),
+      ),
       naicsCodes: v.optional(v.array(v.string())),
       budgetMin: v.optional(v.number()),
       budgetMax: v.optional(v.number()),
