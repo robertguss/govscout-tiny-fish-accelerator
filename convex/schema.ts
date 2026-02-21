@@ -204,8 +204,10 @@ export default defineSchema({
     opportunitiesNew: v.optional(v.number()),
     error: v.optional(v.string()),
     tinyfishRunId: v.optional(v.string()),
+    stepsUsed: v.optional(v.number()), // TinyFish step budget tracking
     createdAt: v.number(),
   })
     .index("by_portalId", ["portalId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_createdAt", ["createdAt"]),
 });

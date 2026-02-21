@@ -2,6 +2,7 @@
 
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
+// Note: internal.scrapeJobs.* and internal.portals.* used for job tracking
 import { v } from "convex/values";
 
 const TINYFISH_SSE_URL = "https://agent.tinyfish.ai/v1/automation/run-sse";
@@ -52,12 +53,19 @@ export const scrapeSledPortal = internalAction({
     success: boolean;
     count: number;
     newCount: number;
+    stepsUsed: number;
     error?: string;
   }> => {
     const apiKey = process.env.TINYFISH_API_KEY;
     if (!apiKey) throw new Error("TINYFISH_API_KEY not set in Convex env");
 
+    // Create a scrape job record for budget tracking
+    const jobId = await ctx.runMutation(internal.scrapeJobs.createJob, {
+      portalId: args.portalId,
+    });
+
     let result: any = null;
+    let completeEvent: any = null;
     let errorMsg: string | undefined;
 
     try {
@@ -79,7 +87,7 @@ export const scrapeSledPortal = internalAction({
         );
       }
 
-      // Read SSE stream
+      // Read SSE stream with chunk-safe buffer accumulation
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -97,6 +105,7 @@ export const scrapeSledPortal = internalAction({
           try {
             const event = JSON.parse(line.slice(6));
             if (event.type === "COMPLETE" && event.status === "COMPLETED") {
+              completeEvent = event; // Capture full event for stepsUsed
               result = event.resultJson;
             }
           } catch {
@@ -105,22 +114,45 @@ export const scrapeSledPortal = internalAction({
         }
       }
     } catch (err: any) {
-      errorMsg = err.message;
+      errorMsg = String(err.message ?? err);
+      await ctx.runMutation(internal.scrapeJobs.failJob, {
+        jobId,
+        error: errorMsg,
+        stepsUsed: completeEvent?.stepsUsed ?? completeEvent?.steps_used,
+      });
       await ctx.runMutation(internal.portals.updatePortalScrapeStatus, {
         portalId: args.portalId,
         status: "failed",
         error: errorMsg,
       });
-      return { success: false, count: 0, newCount: 0, error: errorMsg };
+      return {
+        success: false,
+        count: 0,
+        newCount: 0,
+        stepsUsed: 0,
+        error: errorMsg,
+      };
     }
 
+    const stepsUsed: number =
+      completeEvent?.stepsUsed ?? completeEvent?.steps_used ?? 0;
+
+    console.log(`TinyFish scrape: ${stepsUsed} steps used for ${args.url}`);
+
     if (!result?.opportunities?.length) {
+      await ctx.runMutation(internal.scrapeJobs.completeJob, {
+        jobId,
+        opportunitiesFound: 0,
+        opportunitiesNew: 0,
+        stepsUsed,
+        tinyfishRunId: completeEvent?.runId,
+      });
       await ctx.runMutation(internal.portals.updatePortalScrapeStatus, {
         portalId: args.portalId,
         status: "partial",
         count: 0,
       });
-      return { success: true, count: 0, newCount: 0 };
+      return { success: true, count: 0, newCount: 0, stepsUsed };
     }
 
     const sourceType =
@@ -160,16 +192,26 @@ export const scrapeSledPortal = internalAction({
       },
     );
 
-    await ctx.runMutation(internal.portals.updatePortalScrapeStatus, {
-      portalId: args.portalId,
-      status: "success",
-      count: opportunities.length,
-    });
+    await Promise.all([
+      ctx.runMutation(internal.scrapeJobs.completeJob, {
+        jobId,
+        opportunitiesFound: opportunities.length,
+        opportunitiesNew: newCount,
+        stepsUsed,
+        tinyfishRunId: completeEvent?.runId,
+      }),
+      ctx.runMutation(internal.portals.updatePortalScrapeStatus, {
+        portalId: args.portalId,
+        status: "success",
+        count: opportunities.length,
+      }),
+    ]);
 
     return {
       success: true,
       count: opportunities.length,
       newCount,
+      stepsUsed,
     };
   },
 });

@@ -22,20 +22,33 @@ export const nightlyFederalSync = internalAction({
 });
 
 export const nightlySledScrape = internalAction({
-  args: {},
+  args: {
+    // Safety cap: max portals to scrape per run. Critical during free trial.
+    // Each portal costs ~15 TinyFish steps. Default 3 = ~45 steps/run.
+    maxPortals: v.optional(v.number()),
+  },
   returns: v.null(),
-  handler: async (ctx) => {
-    console.log("Starting nightly SLED scrape...");
+  handler: async (ctx, args) => {
+    const maxPortals = args.maxPortals ?? 3;
+    console.log(`Starting SLED scrape (max ${maxPortals} portals)...`);
 
     // Ensure portals are seeded on first run
     await ctx.runMutation(internal.portals.seedInitialPortals, {});
 
-    // Get all enabled portals
-    const portals = await ctx.runQuery(internal.portals.listEnabledPortals, {});
+    // Get enabled portals, capped to budget limit
+    const allPortals = await ctx.runQuery(
+      internal.portals.listEnabledPortals,
+      {},
+    );
+    const portals = allPortals.slice(0, maxPortals);
 
-    console.log(`Scraping ${portals.length} portals...`);
+    console.log(
+      `Scraping ${portals.length} of ${allPortals.length} enabled portals...`,
+    );
 
-    // Scrape portals sequentially (workpool parallelism to be added in Week 2)
+    let totalStepsUsed = 0;
+
+    // Scrape portals sequentially (workpool parallelism added in Week 2)
     for (const portal of portals) {
       try {
         const result = await ctx.runAction(
@@ -52,15 +65,18 @@ export const nightlySledScrape = internalAction({
               | "school_district",
           },
         );
+        totalStepsUsed += result.stepsUsed ?? 0;
         console.log(
-          `Portal ${portal.name}: ${result.count} found, ${result.newCount} new`,
+          `Portal ${portal.name}: ${result.count} found, ${result.newCount} new, ${result.stepsUsed ?? 0} steps`,
         );
       } catch (err: any) {
         console.error(`Portal ${portal.name} failed: ${err.message}`);
       }
     }
 
-    console.log("SLED scrape complete");
+    console.log(
+      `SLED scrape complete. Total steps used this run: ${totalStepsUsed}`,
+    );
     return null;
   },
 });
