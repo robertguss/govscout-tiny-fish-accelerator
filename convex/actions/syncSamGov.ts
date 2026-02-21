@@ -42,18 +42,31 @@ function toMDY(date: Date): string {
   return `${m}/${d}/${y}`;
 }
 
+// SAM.gov free public API: 10 requests/day hard limit.
+// Budget allocation:
+//   - Daily cron (daysBack:1, maxPages:2)  = 2 requests/day (automatic)
+//   - Manual testing/backfill              = 8 requests/day remaining
+// Apply for a SAM.gov system account to get 1,000 requests/day (1-4 week approval).
+// https://open.gsa.gov/api/get-opportunities-public-api/
 export const syncSamGov = internalAction({
   args: {
     daysBack: v.optional(v.number()),
+    // maxPages controls how many API requests are made (1 page = 1 request = 100 opportunities).
+    // Default 2 = 200 opportunities max per run. Safe for the 10 req/day free limit.
     maxPages: v.optional(v.number()),
   },
-  returns: v.object({ total: v.number(), newOpportunities: v.number() }),
+  returns: v.object({
+    total: v.number(),
+    newOpportunities: v.number(),
+    requestsUsed: v.number(),
+    rateLimited: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     const apiKey = process.env.SAM_GOV_API_KEY;
     if (!apiKey) throw new Error("SAM_GOV_API_KEY not set in Convex env");
 
-    const daysBack = args.daysBack ?? 30;
-    const maxPages = args.maxPages ?? 5;
+    const daysBack = args.daysBack ?? 1;
+    const maxPages = args.maxPages ?? 2; // Conservative default: 2 of 10 daily requests
 
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - daysBack);
@@ -62,6 +75,8 @@ export const syncSamGov = internalAction({
 
     let totalFetched = 0;
     let totalNew = 0;
+    let requestsUsed = 0;
+    let rateLimited = false;
     let offset = 0;
     const limit = 100;
 
@@ -75,6 +90,19 @@ export const syncSamGov = internalAction({
       url.searchParams.set("active", "Yes");
 
       const response = await fetch(url.toString());
+      requestsUsed++;
+
+      // Handle rate limit explicitly — stop pagination, don't crash
+      if (response.status === 429) {
+        console.warn(
+          `SAM.gov rate limit hit after ${requestsUsed} requests today. ` +
+            `Saving ${page + 1 < maxPages ? maxPages - page - 1 : 0} remaining planned requests. ` +
+            `Limit resets at midnight UTC. Apply for a system account for 1,000 req/day.`,
+        );
+        rateLimited = true;
+        break;
+      }
+
       if (!response.ok) {
         console.error(
           `SAM.gov API error: ${response.status} ${response.statusText}`,
@@ -119,9 +147,19 @@ export const syncSamGov = internalAction({
       totalNew += newCount;
       offset += limit;
 
-      if (items.length < limit) break;
+      if (items.length < limit) break; // Last page — no need for another request
     }
 
-    return { total: totalFetched, newOpportunities: totalNew };
+    console.log(
+      `SAM.gov sync: ${requestsUsed} API requests used, ${totalFetched} fetched, ${totalNew} new` +
+        (rateLimited ? " (RATE LIMITED)" : ""),
+    );
+
+    return {
+      total: totalFetched,
+      newOpportunities: totalNew,
+      requestsUsed,
+      rateLimited,
+    };
   },
 });
