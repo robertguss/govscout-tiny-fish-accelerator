@@ -210,19 +210,57 @@ export const getStats = query({
     local: v.number(),
   }),
   handler: async (ctx) => {
-    const all = await ctx.db
-      .query("opportunities")
-      .withIndex("by_active_deadline", (q) => q.eq("active", true))
-      .collect();
+    const [
+      federalOpps,
+      stateOpps,
+      countyOpps,
+      municipalOpps,
+      schoolOpps,
+      specialOpps,
+    ] = await Promise.all([
+      ctx.db
+        .query("opportunities")
+        .withIndex("by_agencyLevel", (q) => q.eq("agencyLevel", "federal"))
+        .collect(),
+      ctx.db
+        .query("opportunities")
+        .withIndex("by_agencyLevel", (q) => q.eq("agencyLevel", "state"))
+        .collect(),
+      ctx.db
+        .query("opportunities")
+        .withIndex("by_agencyLevel", (q) => q.eq("agencyLevel", "county"))
+        .collect(),
+      ctx.db
+        .query("opportunities")
+        .withIndex("by_agencyLevel", (q) => q.eq("agencyLevel", "municipal"))
+        .collect(),
+      ctx.db
+        .query("opportunities")
+        .withIndex("by_agencyLevel", (q) =>
+          q.eq("agencyLevel", "school_district"),
+        )
+        .collect(),
+      ctx.db
+        .query("opportunities")
+        .withIndex("by_agencyLevel", (q) =>
+          q.eq("agencyLevel", "special_district"),
+        )
+        .collect(),
+    ]);
+
+    const federal = federalOpps.length;
+    const state = stateOpps.length;
+    const local =
+      countyOpps.length +
+      municipalOpps.length +
+      schoolOpps.length +
+      specialOpps.length;
+
     return {
-      total: all.length,
-      federal: all.filter((o) => o.agencyLevel === "federal").length,
-      state: all.filter((o) => o.agencyLevel === "state").length,
-      local: all.filter((o) =>
-        ["county", "municipal", "school_district", "special_district"].includes(
-          o.agencyLevel,
-        ),
-      ).length,
+      total: federal + state + local,
+      federal,
+      state,
+      local,
     };
   },
 });
